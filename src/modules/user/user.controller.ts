@@ -13,7 +13,12 @@ import { UserService } from './user.service';
 import { User } from '@prisma/client';
 import { hash } from 'bcryptjs';
 import { ZodValidationPipe } from 'src/pipes/zod.pipe';
-import { UpdateUserSchema, UserDTO, UserSchema } from './dtos/user.dto';
+import {
+  UpdateUserDTO,
+  UpdateUserSchema,
+  UserDTO,
+  UserSchema,
+} from './dtos/user.dto';
 
 @Controller('user')
 export class UserController {
@@ -23,8 +28,8 @@ export class UserController {
   async getAllUsers(): Promise<User[]> {
     try {
       return this.userService.getAllUsers();
-    } catch {
-      throw new HttpException('Error fetching users', 500);
+    } catch (error) {
+      throw new HttpException(`Error fetching users: ${error}`, 500);
     }
   }
 
@@ -32,12 +37,12 @@ export class UserController {
   async getUserById(@Param('id') id: string): Promise<User> {
     try {
       const user = await this.userService.getUserById(id);
-      if (!user) {
-        throw new HttpException('User not found', 404);
-      }
-      return user;
-    } catch {
-      throw new HttpException('Error fetching user', 500);
+
+      if (user) return user;
+
+      throw new HttpException('User not found', 404);
+    } catch (error) {
+      throw new HttpException(`Error fetching user: ${error}`, 500);
     }
   }
 
@@ -46,9 +51,7 @@ export class UserController {
   async createUser(@Body() data: UserDTO): Promise<User> {
     const userExists = await this.userService.getUserByEmail(data.email);
 
-    if (userExists) {
-      throw new HttpException('User already exists', 400);
-    }
+    if (userExists) throw new HttpException('User already exists', 400);
 
     const hashedPassword = await hash(data.password, 6);
 
@@ -59,23 +62,50 @@ export class UserController {
 
     try {
       return this.userService.createUser(userHashed);
-    } catch {
-      throw new HttpException('Error creating user', 500);
+    } catch (error) {
+      throw new HttpException(`Error creating user: ${error}`, 500);
     }
   }
 
   @Patch(':id')
-  @UsePipes(new ZodValidationPipe(UpdateUserSchema))
-  async updateUser(@Param('id') id: string, @Body() data: User): Promise<User> {
+  async updateUser(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(UpdateUserSchema)) data: UpdateUserDTO,
+  ): Promise<User> {
     try {
+      const user = await this.userService.getUserById(id);
+
+      if (!user) throw new HttpException('User not found', 404);
+
+      if (data.email) {
+        const userExists = await this.userService.getUserByEmail(data.email);
+
+        if (userExists) throw new HttpException('Email already in use', 404);
+      }
+
+      if (data.password) {
+        const hashedPassword = await hash(data.password, 6);
+
+        data = {
+          ...data,
+          password: hashedPassword,
+        };
+
+        return this.userService.updateUser(id, data);
+      }
+
       return this.userService.updateUser(id, data);
-    } catch {
-      throw new HttpException('Error updating user', 500);
+    } catch (error) {
+      throw new HttpException(`Error updating user: ${error}`, 500);
     }
   }
 
   @Delete(':id')
   async deleteUser(@Param('id') id: string): Promise<User> {
-    return this.userService.deleteUser(id);
+    try {
+      return this.userService.deleteUser(id);
+    } catch (error) {
+      throw new HttpException(`Error deleting user: ${error}`, 500);
+    }
   }
 }
