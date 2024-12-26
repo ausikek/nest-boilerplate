@@ -35,12 +35,12 @@ export class UserController {
 
   @Get(':id')
   async getUserById(@Param('id') id: string): Promise<User> {
+    const user = await this.userService.getUserById(id);
+
+    if (!user) throw new HttpException('User not found', 404);
+
     try {
-      const user = await this.userService.getUserById(id);
-
-      if (user) return user;
-
-      throw new HttpException('User not found', 404);
+      return user;
     } catch (error) {
       throw new HttpException(`Error fetching user: ${error}`, 500);
     }
@@ -72,17 +72,17 @@ export class UserController {
     @Param('id') id: string,
     @Body(new ZodValidationPipe(UpdateUserSchema)) data: UpdateUserDTO,
   ): Promise<User> {
+    const user = await this.userService.getUserById(id);
+
+    if (!user) throw new HttpException('User not found', 404);
+
+    if (data.email) {
+      const emailExists = await this.userService.getUserByEmail(data.email);
+
+      if (emailExists) throw new HttpException('Email already in use', 404);
+    }
+
     try {
-      const user = await this.userService.getUserById(id);
-
-      if (!user) throw new HttpException('User not found', 404);
-
-      if (data.email) {
-        const userExists = await this.userService.getUserByEmail(data.email);
-
-        if (userExists) throw new HttpException('Email already in use', 404);
-      }
-
       if (data.password) {
         const hashedPassword = await hash(data.password, 6);
 
@@ -102,6 +102,10 @@ export class UserController {
 
   @Delete(':id')
   async deleteUser(@Param('id') id: string): Promise<User> {
+    const user = await this.userService.getUserById(id);
+
+    if (!user) throw new HttpException('User not found', 404);
+
     try {
       return this.userService.deleteUser(id);
     } catch (error) {
